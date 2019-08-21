@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/RichardKnop/machinery/v1/backends/amqp"
+	"github.com/RichardKnop/machinery/v1/brokers/iface"
 	"github.com/RichardKnop/machinery/v1/log"
 	"github.com/RichardKnop/machinery/v1/retry"
 	"github.com/RichardKnop/machinery/v1/tasks"
@@ -25,6 +26,9 @@ type Worker struct {
 	errorHandler    func(err error)
 	preTaskHandler  func(*tasks.Signature)
 	postTaskHandler func(*tasks.Signature)
+
+	// Make taskProcessor pluggable in the worker. Note that the worker itself also implements the taskProcessor.
+	taskProcessor iface.TaskProcessor
 }
 
 // Launch starts a new worker process. The worker subscribes
@@ -62,7 +66,7 @@ func (worker *Worker) LaunchAsync(errorsChan chan<- error) {
 	// Goroutine to start broker consumption and handle retries when broker connection dies
 	go func() {
 		for {
-			retry, err := broker.StartConsuming(worker.ConsumerTag, worker.Concurrency, worker)
+			retry, err := broker.StartConsuming(worker.ConsumerTag, worker.Concurrency, worker.taskProcessor)
 
 			if retry {
 				if worker.errorHandler != nil {

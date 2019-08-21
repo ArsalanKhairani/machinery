@@ -62,22 +62,41 @@ func NewServer(cnf *config.Config) (*Server, error) {
 
 // NewWorker creates Worker instance
 func (server *Server) NewWorker(consumerTag string, concurrency int) *Worker {
-	return &Worker{
+	w := &Worker{
 		server:      server,
 		ConsumerTag: consumerTag,
 		Concurrency: concurrency,
 		Queue:       "",
 	}
+
+	w.taskProcessor = w
+	return w
 }
 
 // NewCustomQueueWorker creates Worker instance with Custom Queue
 func (server *Server) NewCustomQueueWorker(consumerTag string, concurrency int, queue string) *Worker {
-	return &Worker{
+	w := &Worker{
 		server:      server,
 		ConsumerTag: consumerTag,
 		Concurrency: concurrency,
 		Queue:       queue,
 	}
+
+	w.taskProcessor = w
+	return w
+}
+
+// NewCustomQueueWorker creates Worker instance with Custom Queue
+func (server *Server) NewCustomProcessorWorker(consumerTag string, concurrency int, queue string, processor brokersiface.TaskProcessor) *Worker {
+	w := &Worker{
+		server:      server,
+		ConsumerTag: consumerTag,
+		Concurrency: concurrency,
+		Queue:       queue,
+	}
+
+	w.taskProcessor = processor
+	return w
 }
 
 // GetBroker returns broker
