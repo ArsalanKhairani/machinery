@@ -302,3 +302,28 @@ func TestPrivateFunc_consumeWithConcurrency(t *testing.T) {
 		t.Fatal("task not processed in 10 seconds")
 	}
 }
+
+type CustomTaskProcessor struct {
+	*machinery.Worker
+}
+
+func (t CustomTaskProcessor) CustomQueue() string {
+	return "custom-queue"
+}
+
+func TestPrivateFunc_consumeWithDynamicQueue(t *testing.T) {
+	server1, err := machinery.NewServer(cnf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Plugin the worker itself as the taskprocessor
+	p1 := server1.NewWorker("test-worker", 0)
+	qURL := testAWSSQSBroker.GetQueueURLForTest(p1)
+	assert.Equal(t, qURL, testAWSSQSBroker.DefaultQueueURLForTest(), "")
+
+	// plugin some other taskprocessor
+	p2 := CustomTaskProcessor{}
+	qURL = testAWSSQSBroker.GetQueueURLForTest(p2)
+	assert.NotEqual(t, qURL, testAWSSQSBroker.DefaultQueueURLForTest(), "")
+}

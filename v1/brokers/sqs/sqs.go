@@ -90,6 +90,7 @@ func (b *Broker) StartConsuming(consumerTag string, concurrency int, taskProcess
 				close(deliveries)
 				return
 			case <-pool:
+				qURL := b.getQueueURL(taskProcessor)
 				output, err := b.receiveMessage(qURL)
 				if err == nil && len(output.Messages) > 0 {
 					deliveries <- output
@@ -226,15 +227,18 @@ func (b *Broker) consumeOne(delivery *awssqs.ReceiveMessageOutput, taskProcessor
 		return err
 	}
 	// Delete message after successfully consuming and processing the message
-	if err = b.deleteOne(delivery); err != nil {
+	if err = b.deleteOne(&sig.RoutingKey, delivery); err != nil {
 		log.ERROR.Printf("error when deleting the delivery. delivery is %v, Error=%s", delivery, err)
 	}
 	return err
 }
 
 // deleteOne is a method delete a delivery from AWS SQS
-func (b *Broker) deleteOne(delivery *awssqs.ReceiveMessageOutput) error {
-	qURL := b.defaultQueueURL()
+func (b *Broker) deleteOne(qURL *string, delivery *awssqs.ReceiveMessageOutput) error {
+	if qURL == nil {
+		qURL = b.defaultQueueURL()
+	}
+
 	_, err := b.service.DeleteMessage(&awssqs.DeleteMessageInput{
 		QueueUrl:      qURL,
 		ReceiptHandle: delivery.Messages[0].ReceiptHandle,
