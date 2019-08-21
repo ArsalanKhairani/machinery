@@ -277,7 +277,7 @@ func (b *Broker) consumeOne(delivery []byte, taskProcessor iface.TaskProcessor) 
 		conn := b.open()
 		defer conn.Close()
 
-		conn.Do("RPUSH", getQueue(b.GetConfig(), taskProcessor), delivery)
+		conn.Do("RPUSH", signature.RoutingKey, delivery)
 		return nil
 	}
 
