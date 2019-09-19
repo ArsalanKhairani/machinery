@@ -227,7 +227,7 @@ func (b *Broker) consumeOne(delivery *awssqs.ReceiveMessageOutput, taskProcessor
 		return err
 	}
 	// Delete message after successfully consuming and processing the message
-	if err = b.deleteOne(&sig.RoutingKey, delivery); err != nil {
+	if err = b.deleteOne(aws.String(b.GetConfig().Broker + "/" + sig.RoutingKey), delivery); err != nil {
 		log.ERROR.Printf("error when deleting the delivery. delivery is %v, Error=%s", delivery, err)
 	}
 	return err
