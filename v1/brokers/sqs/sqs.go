@@ -34,7 +34,6 @@ type Broker struct {
 	stopReceivingChan chan int
 	sess              *session.Session
 	service           sqsiface.SQSAPI
-	queueUrl          *string
 }
 
 // New creates new Broker instance
@@ -64,10 +63,6 @@ func (b *Broker) GetPendingTasks(queue string) ([]*tasks.Signature, error) {
 // StartConsuming enters a loop and waits for incoming messages
 func (b *Broker) StartConsuming(consumerTag string, concurrency int, taskProcessor iface.TaskProcessor) (bool, error) {
 	b.Broker.StartConsuming(consumerTag, concurrency, taskProcessor)
-	qURL := b.getQueueURL(taskProcessor)
-	//save it so that it can be used later when attempting to delete task
-	b.queueUrl = qURL
-
 	deliveries := make(chan *awssqs.ReceiveMessageOutput, concurrency)
 	pool := make(chan struct{}, concurrency)
 
@@ -81,8 +76,7 @@ func (b *Broker) StartConsuming(consumerTag string, concurrency int, taskProcess
 	go func() {
 		defer b.receivingWG.Done()
 
-		log.INFO.Printf("[*] Waiting for messages on queue: %s. To exit press CTRL+C\n", *qURL)
-
+		log.INFO.Printf("[*] Waiting for messages on queue. To exit press CTRL+C\n")
 		for {
 			select {
 			// A way to stop this goroutine from b.StopConsuming
@@ -227,16 +221,17 @@ func (b *Broker) consumeOne(delivery *awssqs.ReceiveMessageOutput, taskProcessor
 		return err
 	}
 	// Delete message after successfully consuming and processing the message
-	if err = b.deleteOne(aws.String(b.GetConfig().Broker + "/" + sig.RoutingKey), delivery); err != nil {
+	if err = b.deleteOne(delivery, sig); err != nil {
 		log.ERROR.Printf("error when deleting the delivery. delivery is %v, Error=%s", delivery, err)
 	}
 	return err
 }
 
 // deleteOne is a method delete a delivery from AWS SQS
-func (b *Broker) deleteOne(qURL *string, delivery *awssqs.ReceiveMessageOutput) error {
-	if qURL == nil {
-		qURL = b.defaultQueueURL()
+func (b *Broker) deleteOne(delivery *awssqs.ReceiveMessageOutput, sig *tasks.Signature) error {
+	qURL := b.defaultQueueURL()
+	if sig != nil {
+		qURL = aws.String(b.GetConfig().Broker + "/" + sig.RoutingKey)
 	}
 
 	_, err := b.service.DeleteMessage(&awssqs.DeleteMessageInput{
@@ -252,12 +247,7 @@ func (b *Broker) deleteOne(qURL *string, delivery *awssqs.ReceiveMessageOutput) 
 
 // defaultQueueURL is a method returns the default queue url
 func (b *Broker) defaultQueueURL() *string {
-	if b.queueUrl != nil {
-		return b.queueUrl
-	} else {
-		return aws.String(b.GetConfig().Broker + "/" + b.GetConfig().DefaultQueue)
-	}
-
+	return aws.String(b.GetConfig().Broker + "/" + b.GetConfig().DefaultQueue)
 }
 
 // receiveMessage is a method receives a message from specified queue url
@@ -357,8 +347,8 @@ func (b *Broker) stopReceiving() {
 // otherwise using default queueName from config
 func (b *Broker) getQueueURL(taskProcessor iface.TaskProcessor) *string {
 	queueName := b.GetConfig().DefaultQueue
-	if taskProcessor.CustomQueue() != "" {
-		queueName = taskProcessor.CustomQueue()
+	if customQueue := taskProcessor.CustomQueue(); customQueue != "" {
+		queueName = customQueue
 	}
 
 	return aws.String(b.GetConfig().Broker + "/" + queueName)

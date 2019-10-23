@@ -135,7 +135,7 @@ func (b *Broker) ConsumeOneForTest(delivery *awssqs.ReceiveMessageOutput, taskPr
 }
 
 func (b *Broker) DeleteOneForTest(delivery *awssqs.ReceiveMessageOutput) error {
-	return b.deleteOne(nil, delivery)
+	return b.deleteOne(delivery, nil)
 }
 
 func (b *Broker) DefaultQueueURLForTest() *string {
