@@ -335,16 +335,16 @@ func TestPrivateFunc_consumeWithRoundRobinQueues(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rr := NewRoundRobinQueues([]string{"custom-queue-0", "custom-queue-1", "custom-queue-2", "custom-queue-3"})
-
 	w := server1.NewWorker("test-worker", 0)
+
+	// Assigning a getQueueHandler to `Next` method of roundRobinQueues
+	rr := NewRoundRobinQueues([]string{"custom-queue-0", "custom-queue-1", "custom-queue-2", "custom-queue-3"})
 	w.SetGetQueueHandler(rr.Next)
 
 	for i := 0; i < 5; i++ {
+		// the queue url of the broker should match the current queue url of roundRobin
+		// and thus queues are being utilized in round-robin fashion
 		qURL := testAWSSQSBroker.GetQueueURLForTest(w)
-		assert.Equal(t, qURL, testAWSSQSBroker.GetCustomQueueURL(rr.Peek()))
-
-		qURL = testAWSSQSBroker.GetQueueURLForTest(w)
 		assert.Equal(t, qURL, testAWSSQSBroker.GetCustomQueueURL(rr.Peek()))
 	}
 }

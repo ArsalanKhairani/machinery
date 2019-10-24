@@ -110,6 +110,7 @@ func (worker *Worker) LaunchAsync(errorsChan chan<- error) {
 
 // CustomQueue returns Custom Queue of the running worker process
 func (worker *Worker) CustomQueue() string {
+	// if the handler is defined, use that to fetch the queue name
 	if worker.getQueueHandler != nil {
 		return worker.getQueueHandler()
 	}
