@@ -135,7 +135,7 @@ func (b *Broker) Publish(ctx context.Context, signature *tasks.Signature) error 
 
 	MsgInput := &awssqs.SendMessageInput{
 		MessageBody: aws.String(string(msg)),
-		QueueUrl:    aws.String(b.GetConfig().Broker + "/" + signature.RoutingKey),
+		QueueUrl:    b.queueToURL(signature.RoutingKey),
 	}
 
 	// if this is a fifo queue, there needs to be some additional parameters.
@@ -215,7 +215,7 @@ func (b *Broker) consumeOne(delivery *awssqs.ReceiveMessageOutput, taskProcessor
 	// and leave the message in the queue
 	if !b.IsTaskRegistered(sig.Name) {
 		if sig.IgnoreWhenTaskNotRegistered {
-			b.deleteOne(delivery)
+			b.deleteOne(delivery, sig)
 		}
 		return fmt.Errorf("task %s is not registered", sig.Name)
 	}
@@ -238,8 +238,8 @@ func (b *Broker) consumeOne(delivery *awssqs.ReceiveMessageOutput, taskProcessor
 // deleteOne is a method delete a delivery from AWS SQS
 func (b *Broker) deleteOne(delivery *awssqs.ReceiveMessageOutput, sig *tasks.Signature) error {
 	qURL := b.defaultQueueURL()
-	if sig != nil {
-		qURL = aws.String(b.GetConfig().Broker + "/" + sig.RoutingKey)
+	if sig.RoutingKey != "" {
+		qURL = b.queueToURL(sig.RoutingKey)
 	}
 
 	_, err := b.service.DeleteMessage(&awssqs.DeleteMessageInput{
@@ -255,7 +255,7 @@ func (b *Broker) deleteOne(delivery *awssqs.ReceiveMessageOutput, sig *tasks.Sig
 
 // defaultQueueURL is a method returns the default queue url
 func (b *Broker) defaultQueueURL() *string {
-	return aws.String(b.GetConfig().Broker + "/" + b.GetConfig().DefaultQueue)
+	return b.queueToURL(b.GetConfig().DefaultQueue)
 }
 
 // receiveMessage is a method receives a message from specified queue url
@@ -354,10 +354,13 @@ func (b *Broker) stopReceiving() {
 // getQueueURL is a method returns that returns queueURL first by checking if custom queue was set and usign it
 // otherwise using default queueName from config
 func (b *Broker) getQueueURL(taskProcessor iface.TaskProcessor) *string {
-	queueName := b.GetConfig().DefaultQueue
 	if customQueue := taskProcessor.CustomQueue(); customQueue != "" {
-		queueName = customQueue
+		return b.queueToURL(customQueue)
 	}
 
-	return aws.String(b.GetConfig().Broker + "/" + queueName)
+	return b.defaultQueueURL()
+}
+
+func (b *Broker) queueToURL(queue string) *string {
+	return aws.String(b.GetConfig().Broker + "/" + queue)
 }

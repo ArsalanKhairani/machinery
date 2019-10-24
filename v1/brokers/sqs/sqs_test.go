@@ -303,27 +303,48 @@ func TestPrivateFunc_consumeWithConcurrency(t *testing.T) {
 	}
 }
 
-type CustomTaskProcessor struct {
-	*machinery.Worker
+type roundRobinQueues struct {
+	queues []string
+	currentIndex int
 }
 
-func (t CustomTaskProcessor) CustomQueue() string {
-	return "custom-queue"
+func NewRoundRobinQueues(queues []string) *roundRobinQueues {
+	return &roundRobinQueues{
+		queues:       queues,
+		currentIndex: -1,
+	}
 }
 
-func TestPrivateFunc_consumeWithDynamicQueue(t *testing.T) {
+func (r *roundRobinQueues) Peek() string {
+	return r.queues[r.currentIndex]
+}
+
+func (r *roundRobinQueues) Next() string {
+	r.currentIndex += 1
+	if r.currentIndex >= len(r.queues) {
+		r.currentIndex = 0
+	}
+
+	q := r.queues[r.currentIndex]
+	return q
+}
+
+func TestPrivateFunc_consumeWithRoundRobinQueues(t *testing.T) {
 	server1, err := machinery.NewServer(cnf)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Plugin the worker itself as the taskprocessor
-	p1 := server1.NewWorker("test-worker", 0)
-	qURL := testAWSSQSBroker.GetQueueURLForTest(p1)
-	assert.Equal(t, qURL, testAWSSQSBroker.DefaultQueueURLForTest(), "")
+	rr := NewRoundRobinQueues([]string{"custom-queue-0", "custom-queue-1", "custom-queue-2", "custom-queue-3"})
 
-	// plugin some other taskprocessor
-	p2 := CustomTaskProcessor{}
-	qURL = testAWSSQSBroker.GetQueueURLForTest(p2)
-	assert.NotEqual(t, qURL, testAWSSQSBroker.DefaultQueueURLForTest(), "")
+	w := server1.NewWorker("test-worker", 0)
+	w.SetGetQueueHandler(rr.Next)
+
+	for i := 0; i < 5; i++ {
+		qURL := testAWSSQSBroker.GetQueueURLForTest(w)
+		assert.Equal(t, qURL, testAWSSQSBroker.GetCustomQueueURL(rr.Peek()))
+
+		qURL = testAWSSQSBroker.GetQueueURLForTest(w)
+		assert.Equal(t, qURL, testAWSSQSBroker.GetCustomQueueURL(rr.Peek()))
+	}
 }

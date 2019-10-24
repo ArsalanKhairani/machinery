@@ -10,7 +10,6 @@ import (
 
 	"github.com/RichardKnop/machinery/v1/backends/amqp"
 	"github.com/RichardKnop/machinery/v1/brokers/errs"
-	"github.com/RichardKnop/machinery/v1/brokers/iface"
 	"github.com/RichardKnop/machinery/v1/log"
 	"github.com/RichardKnop/machinery/v1/retry"
 	"github.com/RichardKnop/machinery/v1/tasks"
@@ -27,9 +26,7 @@ type Worker struct {
 	errorHandler    func(err error)
 	preTaskHandler  func(*tasks.Signature)
 	postTaskHandler func(*tasks.Signature)
-
-	// Make taskProcessor pluggable in the worker. Note that the worker itself also implements the taskProcessor.
-	taskProcessor iface.TaskProcessor
+	getQueueHandler func() string
 }
 
 // Launch starts a new worker process. The worker subscribes
@@ -67,7 +64,7 @@ func (worker *Worker) LaunchAsync(errorsChan chan<- error) {
 	// Goroutine to start broker consumption and handle retries when broker connection dies
 	go func() {
 		for {
-			retry, err := broker.StartConsuming(worker.ConsumerTag, worker.Concurrency, worker.taskProcessor)
+			retry, err := broker.StartConsuming(worker.ConsumerTag, worker.Concurrency, worker)
 
 			if retry {
 				if worker.errorHandler != nil {
@@ -113,6 +110,10 @@ func (worker *Worker) LaunchAsync(errorsChan chan<- error) {
 
 // CustomQueue returns Custom Queue of the running worker process
 func (worker *Worker) CustomQueue() string {
+	if worker.getQueueHandler != nil {
+		return worker.getQueueHandler()
+	}
+
 	return worker.Queue
 }
 
@@ -394,6 +395,11 @@ func (worker *Worker) SetPreTaskHandler(handler func(*tasks.Signature)) {
 //SetPostTaskHandler sets a custom handler for the end of a job
 func (worker *Worker) SetPostTaskHandler(handler func(*tasks.Signature)) {
 	worker.postTaskHandler = handler
+}
+
+//SetGetQueueHandler sets a get queue handler to fetch queue name from
+func (worker *Worker) SetGetQueueHandler(handler func() string) {
+	worker.getQueueHandler = handler
 }
 
 //GetServer returns server
